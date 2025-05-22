@@ -1,0 +1,192 @@
+import pygame
+import sys
+import random
+import math
+
+# Initialize pygame
+pygame.init()
+
+# Set up display dimensions
+WIDTH = 800
+HEIGHT = 900
+PLAY_AREA = 700
+
+# Create the game window
+screen = pygame.display.set_mode((WIDTH, HEIGHT))
+pygame.display.set_caption("Flag Capture Game")
+
+# Colors
+YELLOW = (255, 255, 0)  # Background color
+BLUE = (0, 0, 255)      # Asterisk color
+BROWN = (139, 69, 19)  # Flag pole color
+WHITE = (255, 255, 255)
+FLAG_COLORS = [
+    (255, 0, 0),    # Red
+    (0, 255, 0),    # Green
+    (0, 0, 255),    # Blue
+    (255, 255, 0),  # Yellow
+    (255, 0, 255),  # Magenta
+    (0, 255, 255),  # Cyan
+]
+
+# Asterisk properties
+asterisk_size = 60  # Increased from 40
+asterisk_speed = 5
+asterisk_x = WIDTH // 2
+asterisk_y = (HEIGHT + PLAY_AREA) // 2 - asterisk_size  # Start at bottom of play area
+font = pygame.font.SysFont(None, asterisk_size)
+score_font = pygame.font.SysFont(None, 36)
+
+# Flag properties
+class Flag:
+    def __init__(self, x, y, color):
+        self.x = x
+        self.y = y
+        self.color = color
+        self.captured = False
+        self.pole_height = 60
+        self.flag_width = 30
+        self.flag_height = 22
+        self.speed = 2
+        self.angle = random.uniform(0, 2 * math.pi)
+
+    def draw(self):
+        if not self.captured:
+            # Draw pole
+            pygame.draw.line(screen, BROWN, (self.x, self.y), (self.x, self.y - self.pole_height), 4)
+            # Draw triangular flag
+            pygame.draw.polygon(screen, self.color, [
+                (self.x, self.y - self.pole_height),
+                (self.x + self.flag_width, self.y - self.pole_height + self.flag_height // 2),
+                (self.x, self.y - self.pole_height + self.flag_height)
+            ])
+
+    def move(self):
+        if not self.captured:
+            # Move flag in a random direction, bouncing off play area boundaries
+            self.x += self.speed * math.cos(self.angle)
+            self.y += self.speed * math.sin(self.angle)
+            # Bounce off play area boundaries
+            left_boundary = (WIDTH - PLAY_AREA) // 2
+            right_boundary = (WIDTH + PLAY_AREA) // 2
+            top_boundary = (HEIGHT - PLAY_AREA) // 2
+            bottom_boundary = (HEIGHT + PLAY_AREA) // 2
+            if self.x < left_boundary or self.x > right_boundary:
+                self.angle = math.pi - self.angle
+            if self.y < top_boundary or self.y > bottom_boundary:
+                self.angle = -self.angle
+            # Keep flag within bounds
+            self.x = max(left_boundary, min(right_boundary, self.x))
+            self.y = max(top_boundary, min(bottom_boundary, self.y))
+
+    def check_capture(self, player_x, player_y, player_size):
+        if not self.captured:
+            # Check if player asterisk overlaps with flag pole base
+            distance = ((player_x - self.x) ** 2 + (player_y - self.y) ** 2) ** 0.5
+            if distance < player_size // 2 + 8:
+                self.captured = True
+                return True
+        return False
+
+# Create flags at random positions within play area
+flags = []
+for i in range(6):
+    flag_x = random.randint((WIDTH - PLAY_AREA) // 2 + 50, (WIDTH + PLAY_AREA) // 2 - 50)
+    flag_y = random.randint((HEIGHT - PLAY_AREA) // 2 + 50, (HEIGHT + PLAY_AREA) // 2 - 50)
+    flags.append(Flag(flag_x, flag_y, FLAG_COLORS[i]))
+
+# Game variables
+score = 0
+game_time = 60
+start_ticks = pygame.time.get_ticks()
+game_over = False
+
+# Game loop
+clock = pygame.time.Clock()
+running = True
+
+while running:
+    # Handle events
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
+        elif event.type == pygame.KEYDOWN and game_over:
+            if event.key == pygame.K_SPACE:
+                # Reset game
+                game_over = False
+                score = 0
+                asterisk_x = WIDTH // 2
+                asterisk_y = (HEIGHT + PLAY_AREA) // 2 - asterisk_size
+                flags = []
+                for i in range(6):
+                    flag_x = random.randint((WIDTH - PLAY_AREA) // 2 + 50, (WIDTH + PLAY_AREA) // 2 - 50)
+                    flag_y = random.randint((HEIGHT - PLAY_AREA) // 2 + 50, (HEIGHT + PLAY_AREA) // 2 - 50)
+                    flags.append(Flag(flag_x, flag_y, FLAG_COLORS[i]))
+                start_ticks = pygame.time.get_ticks()
+
+    if not game_over:
+        # Get keyboard input
+        keys = pygame.key.get_pressed()
+
+        # Move the asterisk, restricted to play area
+        if keys[pygame.K_LEFT] and asterisk_x - asterisk_size // 2 > (WIDTH - PLAY_AREA) // 2:
+            asterisk_x -= asterisk_speed
+        if keys[pygame.K_RIGHT] and asterisk_x + asterisk_size // 2 < (WIDTH + PLAY_AREA) // 2:
+            asterisk_x += asterisk_speed
+        if keys[pygame.K_UP] and asterisk_y - asterisk_size // 2 > (HEIGHT - PLAY_AREA) // 2:
+            asterisk_y -= asterisk_speed
+        if keys[pygame.K_DOWN] and asterisk_y + asterisk_size // 2 < (HEIGHT + PLAY_AREA) // 2:
+            asterisk_y += asterisk_speed
+
+        # Move flags
+        for flag in flags:
+            flag.move()
+
+        # Check for flag captures
+        for flag in flags:
+            if flag.check_capture(asterisk_x, asterisk_y, asterisk_size):
+                score += 50
+
+        # Update timer
+        elapsed_time = (pygame.time.get_ticks() - start_ticks) / 1000
+        time_left = max(0, game_time - elapsed_time)
+
+        # Check for game over conditions
+        if time_left <= 0 or all(flag.captured for flag in flags):
+            game_over = True
+
+    # Draw yellow play area
+    screen.fill((0, 0, 0))
+    pygame.draw.rect(screen, YELLOW, ((WIDTH - PLAY_AREA) // 2, (HEIGHT - PLAY_AREA) // 2, PLAY_AREA, PLAY_AREA))
+
+    # Draw the flags
+    for flag in flags:
+        flag.draw()
+
+    # Draw the blue asterisk
+    asterisk_text = font.render("*", True, BLUE)
+    screen.blit(asterisk_text, (asterisk_x - asterisk_size // 2, asterisk_y - asterisk_size // 2))
+
+    # Draw separating line and score/timer at bottom
+    pygame.draw.line(screen, WHITE, (50, 850), (750, 850), 2)
+    score_text = score_font.render(f"Score: {score}", True, WHITE)
+    timer_text = score_font.render(f"Time: {int(time_left)}", True, WHITE)
+    screen.blit(score_text, (50, 860))
+    screen.blit(timer_text, (650, 860))
+
+    # Display game over banner
+    if game_over:
+        banner_text = score_font.render("Game Over! Press SPACE to restart", True, WHITE)
+        banner_rect = banner_text.get_rect(center=(WIDTH // 2, HEIGHT // 2))
+        pygame.draw.rect(screen, (0, 0, 0), banner_rect.inflate(20, 20))
+        screen.blit(banner_text, banner_rect)
+
+    # Update the display
+    pygame.display.flip()
+
+    # Cap the frame rate
+    clock.tick(60)
+
+# Quit pygame
+pygame.quit()
+sys.exit()
